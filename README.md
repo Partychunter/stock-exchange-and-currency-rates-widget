@@ -3,7 +3,7 @@ a website widget that displays currency rates and indices in blocks and displays
 
 
 the widget can be implemented as an iframe or by editing the code
-```html
+```
 html
 
 <iframe src="sciezka/do/twojego/widgetu.html" 
