@@ -1,2 +1,326 @@
 # stock-exchange-and-currency-rates-widget
 a website widget that displays currency rates and indices in blocks and displays history on a chart
+
+
+the widget can be implemented as an iframe or by editing the code
+```html
+html
+
+<iframe src="sciezka/do/twojego/widgetu.html" 
+        style="width: 100%; height: 500px; border: none;" 
+        title="Opis widgetu">
+</iframe>
+
+```
+## code:
+```
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Widget Giełdowy - Hybrid (Yahoo + Stooq)</title>
+    <style>
+        /* --- STYLE CSS --- */
+        :root {
+            --bg-color: #1e293b;
+            --row-hover: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-gray: #64748b;
+        }
+
+        body {
+            background-color: #0f172a;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .market-widget {
+            width: 100%;
+            max-width: 650px;
+            background-color: var(--bg-color);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            overflow: hidden;
+            border: 1px solid #475569;
+            color: var(--text-primary);
+        }
+
+        .widget-header {
+            padding: 15px 20px;
+            background-color: #0f172a;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .widget-title {
+            font-size: 14px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700;
+        }
+
+        .grid-row {
+            display: grid;
+            grid-template-columns: 40px 1.8fr 1.2fr 0.6fr 1.2fr 1fr 0.5fr;
+            align-items: center;
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--row-hover);
+            gap: 10px;
+        }
+
+        .header-row {
+            font-size: 11px; color: var(--text-secondary); font-weight: 600;
+            text-transform: uppercase; padding-bottom: 5px; padding-top: 15px;
+        }
+
+        .item-row:last-child { border-bottom: none; }
+
+        .col-icon img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; }
+        .col-name { font-weight: 700; font-size: 14px; display: flex; flex-direction: column;}
+        .col-sub { font-size: 10px; color: var(--text-secondary); font-weight: normal; margin-top: 2px; }
+        .col-price { text-align: right; font-family: monospace; font-size: 14px; font-weight: 600; }
+        
+        .col-currency { 
+            font-size: 10px; color: var(--text-secondary); text-align: center; 
+            border: 1px solid #475569; border-radius: 4px; padding: 2px 0; 
+        }
+
+        .col-change { 
+            text-align: right; font-size: 13px; font-weight: 700; 
+            padding: 4px 8px; border-radius: 6px; width: fit-content; justify-self: end; 
+        }
+        
+        .up { color: var(--accent-green); background-color: rgba(16, 185, 129, 0.1); }
+        .down { color: var(--accent-red); background-color: rgba(239, 68, 68, 0.1); }
+        .no-data { color: var(--text-secondary); background-color: rgba(100, 116, 139, 0.1); }
+
+        .col-chart { display: flex; justify-content: center; align-items: center; min-height: 25px; }
+        .col-period { text-align: right; font-size: 10px; color: var(--text-secondary); }
+
+        svg.trend-svg { width: 60px; height: 25px; overflow: visible; }
+        path.trend-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .stroke-up { stroke: var(--accent-green); }
+        .stroke-down { stroke: var(--accent-red); }
+
+        .live-dot {
+            display: inline-block; width: 6px; height: 6px; 
+            background-color: var(--accent-green); border-radius: 50%;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="market-widget">
+    <div class="widget-header">
+        <div class="widget-title">Notowania (Stooq + Yahoo)</div>
+        <div style="font-size: 10px; color: var(--text-secondary); display: flex; align-items: center;" id="status-indicator">
+            <span class="live-dot"></span> <span id="status-text">ŁADOWANIE...</span>
+        </div>
+    </div>
+    
+    <div class="grid-row header-row">
+        <div></div>
+        <div>Instrument</div>
+        <div style="text-align: right;">Kurs</div>
+        <div style="text-align: center;">Waluta</div>
+        <div style="text-align: right;">Zmiana</div>
+        <div style="text-align: center;">Trend</div>
+        <div style="text-align: right;">Czas</div>
+    </div>
+
+    <div id="tickers-container"></div>
+</div>
+
+<script>
+    // --- KONFIGURACJA ---
+    // provider: 'yahoo' (domyślny) lub 'stooq' (dla polskich indeksów)
+    const tickers = [
+        // WALUTY (Yahoo działa super)
+        { provider: 'yahoo', symbol: 'EURPLN=X',  name: 'EUR / PLN',  sub: 'Euro Złoty',     curr: 'PLN', icon: 'https://flagcdn.com/w40/eu.png' },
+        { provider: 'yahoo', symbol: 'USDPLN=X',  name: 'USD / PLN',  sub: 'Dolar Złoty',    curr: 'PLN', icon: 'https://flagcdn.com/w40/us.png' },
+        { provider: 'yahoo', symbol: 'EURUSD=X',  name: 'EUR / USD',  sub: 'Euro Dolar',     curr: 'USD', icon: 'https://flagcdn.com/w40/us.png' },
+        
+        // NASDAQ (Yahoo działa)
+        { provider: 'yahoo', symbol: '^NDX',      name: 'Nasdaq 100', sub: 'USA Tech',       curr: 'USD', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/NASDAQ_Logo.svg/1200px-NASDAQ_Logo.svg.png' },
+        
+        // POLSKIE INDEKSY (Zmieniamy na STOOQ)
+        // Stooq ma proste tikery: mwig40, swig80
+        { provider: 'stooq', symbol: 'mwig40',    name: 'mWIG40',     sub: 'Warszawa',       curr: 'PLN', icon: 'https://flagcdn.com/w40/pl.png' },
+        { provider: 'stooq', symbol: 'swig80',    name: 'sWIG80',     sub: 'Warszawa',       curr: 'PLN', icon: 'https://flagcdn.com/w40/pl.png' },
+        
+        // INDEKSY ZAGRANICZNE (Yahoo)
+        { provider: 'yahoo', symbol: '^GDAXI',    name: 'DAX',        sub: 'Niemcy',         curr: 'EUR', icon: 'https://flagcdn.com/w40/de.png' },
+        { provider: 'yahoo', symbol: '^N225',     name: 'Nikkei 225', sub: 'Japonia',        curr: 'JPY', icon: 'https://flagcdn.com/w40/jp.png' },
+        { provider: 'yahoo', symbol: '^FCHI',     name: 'CAC 40',     sub: 'Francja',        curr: 'EUR', icon: 'https://flagcdn.com/w40/fr.png' },
+        { provider: 'yahoo', symbol: '^FTSE',     name: 'FTSE 100',   sub: 'Londyn',         curr: 'GBP', icon: 'https://flagcdn.com/w40/gb.png' }
+    ];
+
+    const container = document.getElementById('tickers-container');
+    const statusText = document.getElementById('status-text');
+    const statusDot = document.querySelector('.live-dot');
+
+    // --- 1. POBIERANIE Z YAHOO (JSON) ---
+    async function fetchYahooData(symbol) {
+        // Dla Yahoo używamy 7 dni
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=7d`;
+        const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        
+        const res = await fetch(proxy);
+        if(!res.ok) throw new Error('Yahoo Error');
+        const json = await res.json();
+        
+        const prices = json.chart.result[0].indicators.quote[0].close;
+        const clean = prices.filter(p => p !== null);
+        
+        if(clean.length < 2) throw new Error('No Data');
+        
+        const current = clean[clean.length - 1];
+        const prev = clean[clean.length - 2];
+        const change = ((current - prev) / prev) * 100;
+        
+        return { price: current, change: change, history: clean };
+    }
+
+    // --- 2. POBIERANIE ZE STOOQ (CSV) ---
+    async function fetchStooqData(symbol) {
+        // Stooq udostępnia CSV historyczne pod adresem /q/d/l/
+        const url = `https://stooq.pl/q/d/l/?s=${symbol}&i=d`;
+        // Musimy użyć proxy, bo Stooq nie ma CORS
+        const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+        
+        const res = await fetch(proxy);
+        if(!res.ok) throw new Error('Stooq Proxy Error');
+        const text = await res.text();
+        
+        // Parsowanie CSV
+        // Format Stooq: Data,Otwarcie,Najwyzszy,Najnizszy,Zamkniecie,Wolumen
+        const lines = text.trim().split('\n');
+        
+        // Usuwamy nagłówek i bierzemy ostatnie linie (ostatnie dni)
+        // Stooq sortuje od najstarszych do najnowszych (ostatni wiersz to dziś/wczoraj)
+        // Bierzemy ostatnie 7 wierszy
+        const dataRows = lines.slice(1).slice(-8); // Bierzemy 8 żeby mieć zapas do obliczenia zmiany
+        
+        if(dataRows.length < 2) throw new Error('Stooq: Not enough rows');
+        
+        // Wyciągamy cenę zamknięcia (4 kolumna, indeks 4 w CSV)
+        const closes = dataRows.map(line => {
+            const cols = line.split(',');
+            return parseFloat(cols[4]); // 4 to Close
+        });
+
+        const current = closes[closes.length - 1];
+        const prev = closes[closes.length - 2];
+        
+        // Jeśli dane są niepoprawne (np. NaN)
+        if(isNaN(current) || isNaN(prev)) throw new Error('Stooq: NaN data');
+
+        const change = ((current - prev) / prev) * 100;
+        
+        return { price: current, change: change, history: closes };
+    }
+
+    // --- GŁÓWNA FUNKCJA ---
+    async function renderWidget() {
+        container.innerHTML = '';
+        let errorsCount = 0;
+
+        const promises = tickers.map(async (item) => {
+            let data = { success: false };
+            try {
+                if (item.provider === 'stooq') {
+                    const result = await fetchStooqData(item.symbol);
+                    data = { success: true, ...result };
+                } else {
+                    const result = await fetchYahooData(item.symbol);
+                    data = { success: true, ...result };
+                }
+            } catch (e) {
+                console.warn(`Błąd dla ${item.symbol} (${item.provider}):`, e.message);
+            }
+            return { item, data };
+        });
+
+        const results = await Promise.all(promises);
+
+        results.forEach(({ item, data }) => {
+            const div = document.createElement('div');
+            div.className = 'grid-row item-row';
+
+            let priceHtml, changeHtml, chartHtml, changeClass;
+
+            if (data.success) {
+                const isUp = data.change >= 0;
+                changeClass = isUp ? 'up' : 'down';
+                const sign = isUp ? '+' : '';
+                
+                priceHtml = data.price.toFixed(2);
+                changeHtml = `${sign}${data.change.toFixed(2)}%`;
+                chartHtml = createSparkline(data.history, isUp);
+            } else {
+                errorsCount++;
+                priceHtml = '<span style="color: #64748b;">B/D</span>';
+                changeHtml = '---';
+                changeClass = 'no-data';
+                chartHtml = '<span style="font-size:10px; color:#64748b">Brak danych</span>';
+            }
+
+            div.innerHTML = `
+                <div class="col-icon"><img src="${item.icon}" alt="" onerror="this.style.display='none'"></div>
+                <div class="col-name">${item.name}<span class="col-sub">${item.sub}</span></div>
+                <div class="col-price">${priceHtml}</div>
+                <div class="col-currency">${item.curr}</div>
+                <div class="col-change ${changeClass}">${changeHtml}</div>
+                <div class="col-chart">${chartHtml}</div>
+                <div class="col-period">7D</div>
+            `;
+            container.appendChild(div);
+        });
+
+        // Status
+        if (errorsCount === 0) {
+            statusText.innerText = "DANE POBRANE";
+            statusText.style.color = "#10b981"; 
+            statusDot.style.backgroundColor = "#10b981";
+        } else if (errorsCount === tickers.length) {
+            statusText.innerText = "AWARIA POŁĄCZENIA";
+            statusText.style.color = "#ef4444"; 
+            statusDot.style.backgroundColor = "#ef4444";
+        } else {
+            statusText.innerText = "DANE CZĘŚCIOWE";
+            statusText.style.color = "#fbbf24"; 
+            statusDot.style.backgroundColor = "#fbbf24";
+        }
+    }
+
+    function createSparkline(data, isUp) {
+        if(!data || data.length === 0) return '';
+        const min = Math.min(...data);
+        const max = Math.max(...data);
+        const range = max - min || 1;
+        const width = 60; const height = 25;
+
+        const d = data.map((val, i) => {
+            const x = i * (width / (data.length - 1));
+            const y = height - ((val - min) / range) * height;
+            return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+        }).join(' ');
+
+        return `<svg class="trend-svg"><path d="${d}" class="trend-line ${isUp ? 'stroke-up' : 'stroke-down'}"></path></svg>`;
+    }
+
+    renderWidget();
+</script>
+
+</body>
+</html>
+
+```
