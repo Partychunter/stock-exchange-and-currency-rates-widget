@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Widget Giełdowy - Hybrid (Yahoo + Stooq)</title>
     <style>
-        /* --- STYLE CSS --- */
+
         :root {
             --bg-color: #1e293b;
             --row-hover: #334155;
@@ -124,19 +124,16 @@
 </div>
 
 <script>
-    // --- KONFIGURACJA ---
-    // provider: 'yahoo' (domyślny) lub 'stooq' (dla polskich indeksów)
     const tickers = [
-        // WALUTY (Yahoo działa super)
+
         { provider: 'yahoo', symbol: 'EURPLN=X',  name: 'EUR / PLN',  sub: 'Euro Złoty',     curr: 'PLN', icon: 'https://flagcdn.com/w40/eu.png' },
         { provider: 'yahoo', symbol: 'USDPLN=X',  name: 'USD / PLN',  sub: 'Dolar Złoty',    curr: 'PLN', icon: 'https://flagcdn.com/w40/us.png' },
         { provider: 'yahoo', symbol: 'EURUSD=X',  name: 'EUR / USD',  sub: 'Euro Dolar',     curr: 'USD', icon: 'https://flagcdn.com/w40/us.png' },
         
-        // NASDAQ (Yahoo działa)
+
         { provider: 'yahoo', symbol: '^NDX',      name: 'Nasdaq 100', sub: 'USA Tech',       curr: 'USD', icon: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/NASDAQ_Logo.svg/1200px-NASDAQ_Logo.svg.png' },
         
-        // POLSKIE INDEKSY (Zmieniamy na STOOQ)
-        // Stooq ma proste tikery: mwig40, swig80
+
         { provider: 'stooq', symbol: 'mwig40',    name: 'mWIG40',     sub: 'Warszawa',       curr: 'PLN', icon: 'https://flagcdn.com/w40/pl.png' },
         { provider: 'stooq', symbol: 'swig80',    name: 'sWIG80',     sub: 'Warszawa',       curr: 'PLN', icon: 'https://flagcdn.com/w40/pl.png' },
         
@@ -153,7 +150,7 @@
 
     // --- 1. POBIERANIE Z YAHOO (JSON) ---
     async function fetchYahooData(symbol) {
-        // Dla Yahoo używamy 7 dni
+
         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=7d`;
         const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
         
@@ -175,27 +172,23 @@
 
     // --- 2. POBIERANIE ZE STOOQ (CSV) ---
     async function fetchStooqData(symbol) {
-        // Stooq udostępnia CSV historyczne pod adresem /q/d/l/
+
         const url = `https://stooq.pl/q/d/l/?s=${symbol}&i=d`;
-        // Musimy użyć proxy, bo Stooq nie ma CORS
+
         const proxy = `https://corsproxy.io/?${encodeURIComponent(url)}`;
         
         const res = await fetch(proxy);
         if(!res.ok) throw new Error('Stooq Proxy Error');
         const text = await res.text();
         
-        // Parsowanie CSV
-        // Format Stooq: Data,Otwarcie,Najwyzszy,Najnizszy,Zamkniecie,Wolumen
+
         const lines = text.trim().split('\n');
         
-        // Usuwamy nagłówek i bierzemy ostatnie linie (ostatnie dni)
-        // Stooq sortuje od najstarszych do najnowszych (ostatni wiersz to dziś/wczoraj)
-        // Bierzemy ostatnie 7 wierszy
-        const dataRows = lines.slice(1).slice(-8); // Bierzemy 8 żeby mieć zapas do obliczenia zmiany
+        const dataRows = lines.slice(1).slice(-8);
         
         if(dataRows.length < 2) throw new Error('Stooq: Not enough rows');
         
-        // Wyciągamy cenę zamknięcia (4 kolumna, indeks 4 w CSV)
+
         const closes = dataRows.map(line => {
             const cols = line.split(',');
             return parseFloat(cols[4]); // 4 to Close
